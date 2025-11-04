@@ -1,12 +1,41 @@
 const express = require('express');
 const cors = require('cors');
+const admin = require("firebase-admin");
 require('dotenv').config()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const app = express();
 const port = process.env.PORT || 3000;
+
+
+// firebase auth 
+const serviceAccount = require("./smart-deals-firebase-admin-key.json");
+
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+});
+
 // middleware
 app.use(cors());
 app.use(express.json())
+// custom middleware 
+const verifyFirebaseToken = async (req, res, next) => {
+    if (!req.headers.authorization) {
+        return res.status(401).send({ message: "Unatuhraize access" })
+    };
+    const token = req.headers.authorization.split(" ")[1];
+    if (!token) {
+        return res.status(401).send({ message: "Unathoraize access" })
+    }
+    // verify token 
+    try {
+        const userInfo = await admin.auth().verifyIdToken(token);
+        req.token_email = userInfo.email;
+        next()
+    } catch {
+        return res.status(401).send({ message: "Unathoraize access" })
+    }
+
+}
 app.get('/', (req, res) => {
     res.send("Welcome")
 })
@@ -63,14 +92,18 @@ async function run() {
             const result = await coursor.toArray()
             res.send(result)
         })
-        app.get('/bids',async(req,res)=>{
+        app.get('/bids', verifyFirebaseToken, async (req, res) => {
             const email = req.query.email;
             const query = {}
-            if(email){
-                query.buyer_email=email;
+            console.log(req.token_email)
+            if(req.token_email!==email){
+                return res.status(403).send({message:"Forbidden access"})
             }
-            const coursor = bidsCollection.find(query).sort({bid_price: 1})
-            const result= await coursor.toArray()
+            if (email) {
+                query.buyer_email = email;
+            }
+            const coursor = bidsCollection.find(query).sort({ bid_price: 1 })
+            const result = await coursor.toArray()
             res.send(result)
         })
         app.post('/bid', async (req, res) => {
@@ -78,10 +111,10 @@ async function run() {
             const result = await bidsCollection.insertOne(newBid)
             res.send(result)
         })
-        app.delete('/bids/:id',async(req,res)=>{
+        app.delete('/bids/:id', async (req, res) => {
             const id = req.params.id;
-            const query ={_id:new ObjectId(id)}
-            const result= await bidsCollection.deleteOne(query)
+            const query = { _id: new ObjectId(id) }
+            const result = await bidsCollection.deleteOne(query)
             res.send(result)
         })
         // Send a ping to confirm a successful connection
