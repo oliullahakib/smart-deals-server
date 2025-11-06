@@ -8,7 +8,9 @@ const port = process.env.PORT || 3000;
 
 
 // firebase auth 
-const serviceAccount = require("./smart-deals-firebase-admin-key.json");
+// index.js
+const decoded = Buffer.from(process.env.FIREBASE_SERVICE_KEY, "base64").toString("utf8");
+const serviceAccount = JSON.parse(decoded);
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
@@ -73,6 +75,15 @@ async function run() {
             const result = await smartDealsCollection.findOne(query);
             res.send(result)
         })
+        app.get('/myProducts',verifyFirebaseToken,async(req,res)=>{
+            const email =req.query.email;
+            if(req.token_email!==email){
+                return res.status(403).send({message:'Forbidden access'})
+            }
+            const query = {seller_email:email}
+            const result= await smartDealsCollection.find(query).toArray();
+            res.send(result)
+        })
         app.get('/products/recent', async (req, res) => {
             const coursor = smartDealsCollection.find().sort({ price_min: 1 }).limit(6);
             const result = await coursor.toArray();
@@ -118,8 +129,8 @@ async function run() {
             res.send(result)
         })
         // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
+        // await client.db("admin").command({ ping: 1 });
+        // console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
         // Ensures that the client will close when you finish/error
         // await client.close();
